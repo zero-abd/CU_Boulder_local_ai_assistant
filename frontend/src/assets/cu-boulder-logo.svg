@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="15" fill="#cfb87c" />
+  <path d="M25,30 v40 h10 v-40 z" fill="#1b2a4e" />
+  <path d="M45,30 h25 v8 h-15 v10 h15 v8 h-15 v15 h-10 z" fill="#1b2a4e" />
+  <text x="50" y="85" font-family="Arial" font-size="12" fill="#1b2a4e" text-anchor="middle">CU BUFFS</text>
+</svg> 
