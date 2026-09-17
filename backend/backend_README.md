@@ -16,7 +16,7 @@ This Flask server connects the frontend React application with the BuffAdvisor c
 pip install flask flask-cors
 ```
 
-2. Install the dependencies required by `bot.py` (includes `onnxruntime-genai` for the quantized DeepSeek model):
+2. Install the dependencies required by `bot.py` (includes `onnxruntime-genai` for the quantized DeepSeek-R1-Distill-Llama-8B model):
 
 ```bash
 pip install -r requirements.txt
