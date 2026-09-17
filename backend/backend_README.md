@@ -16,17 +16,16 @@ This Flask server connects the frontend React application with the BuffAdvisor c
 pip install flask flask-cors
 ```
 
-2. Make sure you have all the dependencies required by the `bot.py` file:
+2. Install the dependencies required by `bot.py` (includes `onnxruntime-genai` for the quantized DeepSeek model):
 
 ```bash
-pip install langchain langchain_ollama langchain_community python-multipart pymupdf faiss-cpu
+pip install -r requirements.txt
 ```
 
 3. Install Ollama if you haven't already (for running the local LLM):
    - Follow instructions at [https://ollama.com/](https://ollama.com/)
-   - Make sure to pull the models mentioned in the `bot.py` file:
+   - Pull the embedding model used by `bot.py`:
      ```bash
-     ollama pull gemma2:2b
      ollama pull nomic-embed-text
      ```
 
@@ -40,7 +39,7 @@ pip install langchain langchain_ollama langchain_community python-multipart pymu
 python server.py
 ```
 
-The server will run on port 5000 by default.
+The server will run on port 5001 by default (override with the `PORT` environment variable).
 
 ## API Endpoints
 

@@ -11,7 +11,7 @@ This is the frontend for the BuffAdvisor application, powered by React and Vite.
 
 2. Create a `.env` file in the frontend directory with:
    ```
-   VITE_API_URL=http://localhost:5000/api
+   VITE_API_URL=http://localhost:5001/api
    ```
 
 3. Start the development server:
@@ -36,5 +36,5 @@ This is the frontend for the BuffAdvisor application, powered by React and Vite.
 ## Troubleshooting
 
 - If you encounter errors related to missing dependencies, run `npm install` again
-- Make sure the backend is running and available at http://localhost:5000
+- Make sure the backend is running and available at http://localhost:5001
 - Check the console for any API connection errors
