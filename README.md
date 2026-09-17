@@ -1,6 +1,6 @@
 # BuffAdvisor
 
-**A CU Boulder campus assistant that runs a quantized DeepSeek R1 model entirely on a local AMD AI PC.** Built at HackCU 2025 (HackCU 11), where it took 1st place in the AMD AI PC track.
+**A CU Boulder campus assistant that runs a quantized DeepSeek-R1-Distill-Llama-8B model entirely on a local AMD AI PC.** Built at HackCU 2025 (HackCU 11), where it took 1st place in the AMD AI PC track.
 
 Students ask about programs, resources and campus life by typing or speaking. BuffAdvisor retrieves the relevant passages from a CU Boulder information PDF and answers with DeepSeek-R1-Distill-Llama-8B, quantized with AMD Quark and run through ONNX Runtime GenAI on the local machine. No cloud model is involved.
 
@@ -52,7 +52,7 @@ flowchart LR
 ## Repository layout
 
 ```
-amd_llm_quantization.ipynb   Colab notebook: install AMD Quark and quantize DeepSeek models
+amd_llm_quantization.ipynb   Colab notebook: install AMD Quark and quantize DeepSeek-R1-Distill-Llama-8B
 backend/
   bot.py                     RAG pipeline, DeepSeek ONNX wrapper, interactive CLI
   server.py                  Flask API (chat with SSE streaming, status, health, initialize)
