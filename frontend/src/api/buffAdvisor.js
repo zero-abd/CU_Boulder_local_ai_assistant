@@ -1,160 +1,172 @@
-import axios from 'axios';
+// API clients for BuffAdvisor.
+//
+// askLocal: the on-device Flask backend (backend/server.py), which runs
+//   DeepSeek-R1-Distill-Llama-8B through ONNX Runtime GenAI and streams
+//   sentences over Server-Sent Events. Only used when VITE_API_URL is set
+//   or in `npm run dev`.
+// askLive: the hosted "bring your own key" mode. For the listed providers the
+//   request goes through api/chat.js, a stateless relay to a fixed provider
+//   host that never stores or logs the key. A custom base URL is called
+//   directly from the browser.
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+export const LOCAL_API_URL =
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5001/api' : '');
 
-const apiClient = axios.create({
-  baseURL: API_URL,
-  timeout: 60000,
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
-
-apiClient.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response) {
-      console.error('API Error Response:', {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers
-      });
-    } else if (error.request) {
-      console.error('API Request Error (No Response):', error.request);
-    } else {
-      console.error('API Error:', error.message);
-    }
-    return Promise.reject(error);
-  }
-);
-
-const buffAdvisorApi = {
-  async checkStatus() {
-    try {
-      console.log('Checking API status at:', `${API_URL}/status`);
-      const response = await apiClient.get('/status');
-      console.log('Status response:', response.data);
-      return response.data.ready;
-    } catch (error) {
-      console.error('Error checking status:', error);
-      return false;
-    }
-  },
-
-  sendMessageStream(message, style = 'brief', newSession = false, onChunk, onComplete, onError) {
-    console.log('Setting up streaming message to backend API:', { message, style, new_session: newSession });
-    
-    const controller = new AbortController();
-    
-    apiClient.post('/chat', {
-      message,
-      style,
-      new_session: newSession,
-      streaming: true
-    }, { signal: controller.signal })
-      .then(response => {
-        console.warn('Received non-streaming response:', response.data);
-        if (onComplete) onComplete(response.data);
-      })
-      .catch(error => {
-        console.error('Error setting up streaming response:', error);
-        if (onError) onError(error);
-      });
-    
-    const eventSource = new EventSource(`${API_URL}/chat?message=${encodeURIComponent(message)}&style=${style}&new_session=${newSession}&streaming=true`);
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.status === 'generating' && data.chunk) {
-          if (onChunk) onChunk(data.chunk);
-        } 
-        else if (data.status === 'complete') {
-          console.log('Streaming completed:', data);
-          eventSource.close();
-          if (onComplete) onComplete(data);
-        }
-        else if (data.status === 'error') {
-          console.error('Streaming error:', data.message);
-          eventSource.close();
-          if (onError) onError(new Error(data.message));
-        }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error, event.data);
-        if (onError) onError(error);
-      }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      eventSource.close();
-      if (onError) onError(new Error('Connection to server lost'));
-    };
-    
-    return {
-      abort: () => {
-        console.log('Aborting streaming connection');
-        controller.abort();
-        eventSource.close();
-      }
-    };
-  },
-
-  async sendMessage(message, style = 'balanced', newSession = false, options = {}) {
-    try {
-      console.log('Sending message to backend API:', { message, style, new_session: newSession });
-      console.log('API URL:', API_URL);
-      
-      const requestConfig = {
-        ...options
-      };
-      
-      const response = await apiClient.post('/chat', {
-        message,
-        style,
-        new_session: newSession,
-        streaming: false
-      }, requestConfig);
-      
-      console.log('API response received:', response.data);
-      
-      if (!response.data.response) {
-        console.warn('Response does not contain expected "response" field:', response.data);
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Error sending message to backend:', error);
-      
-      if (error.code === 'ECONNABORTED') {
-        error.isTimeout = true;
-        error.friendlyMessage = 'Request timed out. The server might be busy or experiencing issues.';
-      } else if (error.response) {
-        error.friendlyMessage = error.response.data?.message || 
-                               error.response.data?.error || 
-                               `Server error (${error.response.status})`;
-      } else if (error.request) {
-        error.friendlyMessage = 'No response received from server. Please check your connection.';
-      } else {
-        error.friendlyMessage = 'Error setting up request. Please try again.';
-      }
-      
-      throw error;
-    }
-  },
-
-  async healthCheck() {
-    try {
-      console.log('Performing health check at:', `${API_URL}/health`);
-      const response = await apiClient.get('/health', { timeout: 5000 });
-      console.log('Health check response:', response.data);
-      return true;
-    } catch (error) {
-      console.error('Health check failed:', error);
-      return false;
-    }
-  }
+// Same style instructions as LangChain.choose_solution_style in backend/bot.py.
+const STYLE_TEXT = {
+  brief: 'Provide the shortest possible answers. One sentence is ideal.',
+  detailed: 'Provide concise but informative answers in 2-3 sentences. No longer.',
+  supportive: 'Be encouraging but extremely brief. Keep answers to 1-2 sentences.',
+  balanced: 'Balance information with brevity. Maximum 2 sentences.',
 };
 
-export default buffAdvisorApi;
+// Reads an SSE response body and calls onEvent with each `data:` payload.
+async function readSSE(body, onEvent) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (line.startsWith('data:')) {
+        if (onEvent(line.slice(5).trim()) === false) return;
+      }
+    }
+  }
+}
+
+// One POST that streams the answer back. (The hackathon client sent a POST
+// and also opened an EventSource GET for the same question, so the model ran
+// twice per message.)
+export async function askLocal({ question, style, onChunk, signal }) {
+  const res = await fetch(`${LOCAL_API_URL}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: question, style, new_session: false, streaming: true }),
+    signal,
+  });
+  if (!res.ok) {
+    let msg = `Local backend returned ${res.status}`;
+    try {
+      const j = await res.json();
+      msg = j.message || j.error || msg;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(msg);
+  }
+  let error = null;
+  await readSSE(res.body, (data) => {
+    let evt;
+    try {
+      evt = JSON.parse(data);
+    } catch {
+      return true;
+    }
+    if (evt.status === 'generating' && evt.chunk) onChunk(evt.chunk);
+    if (evt.status === 'error') error = new Error(evt.message || 'Generation failed');
+    return evt.status !== 'complete' && evt.status !== 'error';
+  });
+  if (error) throw error;
+}
+
+export async function checkLocal() {
+  if (!LOCAL_API_URL) return false;
+  try {
+    const res = await fetch(`${LOCAL_API_URL}/status`, { signal: AbortSignal.timeout(4000) });
+    const j = await res.json();
+    return Boolean(j.ready);
+  } catch {
+    return false;
+  }
+}
+
+// Prompt adapted from LangChain.prompt_template in backend/bot.py.
+export function buildMessages({ question, style, notes }) {
+  const context = notes.length
+    ? notes.map((n, i) => `[${i + 1}] ${n.title}\n${n.text}`).join('\n\n')
+    : '(no matching campus notes)';
+  const system = [
+    'You are BuffAdvisor, an AI assistant for University of Colorado Boulder students.',
+    'Provide quick, concise information about CU Boulder. BE EXTREMELY BRIEF. Answer in 1-3 sentences only.',
+    `Advisory Style: ${STYLE_TEXT[style] || STYLE_TEXT.balanced}`,
+    'Answer only from the Reference Information. If it does not cover the question, say you do not have that in your campus notes and suggest checking colorado.edu.',
+    'Plain text only, no markdown.',
+  ].join('\n');
+  const user = `Student Query: ${question}\n\nReference Information:\n${context}`;
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+}
+
+export async function askLive({ provider, baseUrl, apiKey, model, question, style, notes, onChunk, signal }) {
+  const messages = buildMessages({ question, style, notes });
+  const viaRelay = provider !== 'custom' && !import.meta.env.DEV;
+  const url = viaRelay ? '/api/chat' : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const payload = viaRelay
+    ? { provider, model, messages }
+    : { model, messages, stream: true, temperature: 0.3, max_tokens: 400 };
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    throw new Error(
+      viaRelay
+        ? 'Network error. Try again.'
+        : `No readable response from ${new URL(url, location.href).host}. Check the base URL and key; the provider must allow browser (CORS) requests.`
+    );
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const j = await res.json();
+      detail = j.error?.message || j.message || '';
+    } catch {
+      /* not JSON */
+    }
+    const hint = res.status === 401 || res.status === 403 ? ' Check your API key.' : '';
+    detail = detail.replace(/\.\s*$/, '');
+    throw new Error(`Provider returned ${res.status}${detail ? `: ${detail}` : ''}.${hint}`);
+  }
+
+  // DeepSeek-R1-style models can emit <think>...</think>; hide that part.
+  let raw = '';
+  let shown = '';
+  const emit = () => {
+    const visible = raw.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').replace(/^\s+/, '');
+    if (visible.length > shown.length) {
+      onChunk(visible.slice(shown.length));
+      shown = visible;
+    }
+  };
+  await readSSE(res.body, (data) => {
+    if (data === '[DONE]') return false;
+    try {
+      const j = JSON.parse(data);
+      const delta = j.choices?.[0]?.delta?.content;
+      if (delta) {
+        raw += delta;
+        emit();
+      }
+    } catch {
+      /* ignore keep-alive lines */
+    }
+    return true;
+  });
+  if (!shown) throw new Error('The model returned an empty answer. Try another model.');
+}

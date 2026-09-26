@@ -1,40 +1,15 @@
-# BuffAdvisor Frontend
+# BuffAdvisor frontend
 
-This is the frontend for the BuffAdvisor application, powered by React and Vite.
+React 19 + Vite 6 + Tailwind 4. Deployed at https://buffadvisor.vercel.app (Vercel project root: `frontend/`).
 
-## Setup and Running
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build
+```
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Modes
 
-2. Create a `.env` file in the frontend directory with:
-   ```
-   VITE_API_URL=http://localhost:5001/api
-   ```
-
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-   The frontend will be available at http://localhost:5173.
-
-## Project Structure
-
-- `src/components/`: UI components including ChatExample with voice capabilities
-- `src/api/`: API client for communicating with the Flask backend
-- `src/App.jsx`: Main application component
-
-## Features
-
-- Voice input via Web Speech API
-- Text-to-speech for responses
-- Different response styles (balanced, brief, detailed, supportive)
-- Status indicators for backend connection
-
-## Troubleshooting
-
-- If you encounter errors related to missing dependencies, run `npm install` again
-- Make sure the backend is running and available at http://localhost:5001
-- Check the console for any API connection errors
+- **Sample answers**: `src/data/samples.js`, labelled as samples on the page. Retrieval over `src/data/campusDocs.js` runs in the browser (`src/rag/retrieve.js`).
+- **Live, your key**: the visitor's own OpenAI-compatible key. Preset providers go through `api/chat.js` (a Vercel function that relays to a fixed host and stores nothing); a custom base URL is called from the browser. Under `npm run dev` presets are called directly, since Vite does not serve `api/`; use `vercel dev` to exercise the relay.
+- **On-device backend**: shown when `VITE_API_URL` is set or under `npm run dev` (defaults to `http://localhost:5001/api`). Streams from `backend/server.py` over SSE with a single POST.
